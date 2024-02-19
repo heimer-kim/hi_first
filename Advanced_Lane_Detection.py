@@ -67,39 +67,53 @@ draw_imgs(calib_files, len(calib_files)//2, dosave=True, save_dir=OUTDIR)
 nx = 9
 ny = 6 #체스보드의 코너 수입니다. 각각 행과 열에 대한 코너 수를 나타냅니다.
 
-objp = np.zeros((ny * nx, 3), np.float32) #실세계에서 체스보드 코너의 3D 좌표를 저장합니다. 각 코너는 (x, y, z) 형태의 좌표를 가지며, z는 항상 0입니다
-objp[:,:2] = np.mgrid[:nx, :ny].T.reshape(-1, 2)
+objp = np.zeros((ny * nx, 3), np.float32) #실세계에서 체스보드 코너의 3D 좌표를 저장합니다. 각 코너는 (x, y, z) 형태의 좌표를 가지며, z는 항상 0입니다 54행 3열
+objp[:,:2] = np.mgrid[:nx, :ny].T.reshape(-1, 2) #(nx, ny ,2) 형태 배열을 (nx*ny,2) 형태로 변환 즉 각 행이 하나의 점을 나타내며 두열은 각 각 x와 y좌표를 의미
 
 objpoints = [] # 3d points in real world space, 모든 이미지에 대해 감지된 코너들의 3D 위치를 저장하는 리스트
 imgpoints = [] # 2d points in image plane.,이미지 평면에서 감지된 코너들의 2D 위치를 저장하는 리스트
 
 failed =[] #코너 감지에 실패한 이미지 파일 이름을 저장하는 리스트
 
-for idx, name in enumerate(calib_files):
+for idx, name in enumerate(calib_files): #enumerate  인덱스와 함게 해당항목을 반환하는 함수, 튜플로 반환
     img = cv2.imread(CAL_IMGS + "/"+ name)
     
     # Convert to grayscale
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     
-    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001)
+
+    #    cv2.TERM_CRITERIA_EPS: 이 조건은 알고리즘의 원하는 정확도(epsilon)에 도달했을 때 알고리즘을 종료하도록 합니다. 즉, 알고리즘이 설정된 epsilon 값보다 작은 변화가 발생하면 종료됩니다.
+    # v2.TERM_CRITERIA_MAX_ITER: 이 조건은 알고리즘이 설정된 최대 반복 횟수에 도달했을 때 종료하도록 합니다. 알고리즘이 설정된 반복 횟수를 초과하면, 그 시점에서 종료됩니다.
+    # 이 두 조건은 + 연산자를 사용하여 결합될 수 있으며, 이는 알고리즘이 두 조건 중 하나라도 만족할 때 종료되도록 설정됨을 의미합니다.
+
+    '''튜플의 이러한 구조는 OpenCV의 특정 함수들이 종료 조건을 해석하는 방식과 직접적으로 연결되어 있습니다. 
+    예를 들어, cv2.findChessboardCorners, cv2.cornerSubPix, cv2.calibrateCamera와 같은 함수들은 이 튜플을 인자로 받아, 두 번째 값으로 최대 반복 횟수를, 세 번째 값으로 원하는 정확도를 해석합니다.
+    '''
+    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.001) #(종료 조건 유형, 최대 반복 횟수, 원하는 정확도)의 형식을 따라야 합니다.
     
     # Find the chessboard corners
-    ret, corners = cv2.findChessboardCorners(gray, (nx, ny), None)
+    ret, corners = cv2.findChessboardCorners(gray, (nx, ny), None) #이 함수는 성공여부 불리언값(ret)값, 찾아낸 코너 위치정보 순서의 튜플로 반환하기에 순서 바꾸면 안된다.
     
-    if ret == True:
-        objpoints.append(objp)
+    if ret == True: #코너 검출에 성공하면
+        objpoints.append(objp) #빈 리스트인 objpoints뒤에 위에서 만든 격자(gird)들의 좌표 값인 objp 값을 추가
         
+        #cv2.findChessboardCorners와 같은 함수로 초기 코너 위치를 대략적으로 찾은 후, 그 결과를 더욱 정밀하게 조정하는 데 사용
+        #gray 이미지에서 이미 검출된 corners의 위치를 (11, 11) 크기의 윈도우를 사용하여 미세 조정합니다. (-1, -1)은 중심점 주변의 노이즈를 방지하기 위해 사용되며, 
+        #criteria는 미세 조정 과정의 종료 조건을 정의합니다. 
+        #이 과정을 통해, 초기에 검출된 코너의 위치를 보다 정확한 서브픽셀 단위의 위치로 조정할 수 있습니다
         corners = cv2.cornerSubPix(gray,corners,(11,11),(-1,-1),criteria)
         
-        imgpoints.append(corners)
+        
+        imgpoints.append(corners) #코너좌표 보정된 좌표 값을 빈 2d 좌표로 활용될 imgpoints에 추가한다. 아때 빈 리스트 이므로 그냥 넣어진다.
         
         # Draw and display the corners
-        cv2.drawChessboardCorners(img, (nx, ny), corners, ret)
-        f, (ax1, ax2) = plt.subplots(1, 2, figsize=(12,8))
+        cv2.drawChessboardCorners(img, (nx, ny), corners, ret)  #img에 있는 원본이미지를 배경으로  코너좌표보정된 값인 corners에 그림 그린다 
+        f, (ax1, ax2) = plt.subplots(1, 2, figsize=(12,8)) #1행2열의 서브플롯에 대한 축 객체 ax1, ax2로 지정
         f.tight_layout()
-        ax1.imshow(cv2.cvtColor(cv2.imread(CAL_IMGS + "/"+ name), cv2.COLOR_BGR2RGB))
+        ax1.imshow(cv2.cvtColor(cv2.imread(CAL_IMGS + "/"+ name), cv2.COLOR_BGR2RGB)) #현재 img는 코너에 표시된 그림으로 바뀌었으니 원본파일을 다시 불러와서 오리지날이미지를 그래프에 나타낸다
         ax1.set_title("Original:: " + name, fontsize=18)
-        ax2.imshow(cv2.cvtColor(img,cv2.COLOR_BGR2RGB))
+        ax2.imshow(cv2.cvtColor(img,cv2.COLOR_BGR2RGB))# 위에 cv2.drawChessboardCorners를 통해서 변환된img를 그래프에 나타낸다.
+        #matplotlib는 RGB포멧을 쓰는데 opencv는 BGR 포멧을 사용 하기에,
         ax2.set_title("Corners:: "+ name, fontsize=18)
         f.savefig(OUTDIR + "/op_" + str(time.time()) + ".jpg")
         
@@ -126,7 +140,9 @@ def undistort_no_read(img, objpoints, imgpoints):
     undist= cv2.undistort(img, mtx, dist, None, mtx)
     return undist
 
-undist = undistort(CAL_IMGS+"/calibration10.jpg", objpoints, imgpoints)
+
+ #10번이미지 예시 출력, 오리지날 이미지와 왜곡수정한 이미지 나란히 두고 비교 하는 블록
+undist = undistort(CAL_IMGS+"/calibration10.jpg", objpoints, imgpoints)록
 f, (ax1, ax2) = plt.subplots(1, 2, figsize=(12,8))
 f.tight_layout()
 ax1.imshow(cv2.cvtColor(cv2.imread(CAL_IMGS+"/calibration10.jpg"), cv2.COLOR_BGR2RGB))
@@ -135,11 +151,23 @@ ax2.imshow(cv2.cvtColor(undist,cv2.COLOR_BGR2RGB))
 ax2.set_title("Undistorted:: calibration10.jpg", fontsize=18)
 f.savefig(OUTDIR + "/op_" + str(time.time()) + ".jpg")
 
-images = glob.glob('test_images/test*.jpg')
+
+#jpg 파일의 경로명을 리스트 형태로 images 변수에 저장합니다.
+#image 변수는 리스트 images의 다음 요소(이미지 파일 경로)를 차례대로 가리킵니다. 따라서 루프의 본문에서는 image를 사용하여 각 이미지 파일에 대한 작업을 수행할 수 있습니다.
+images = glob.glob('test_images/test*.jpg') #glob.glob('test_images/test*.jpg')를 사용하여 특정 패턴("test*.jpg")에 일치하는 모든 이미지 파일의 경로를 가져옵니다.
 for image in images:
     undist = undistort(image, objpoints, imgpoints)
     f, (ax1, ax2) = plt.subplots(1, 2, figsize=(12,8))
     f.tight_layout()
+
+    # 전체 경로에서 파일 이름만 추출
+    """ filename = os.path.basename(image)
+    ax1.imshow(cv2.cvtColor(cv2.imread(image), cv2.COLOR_BGR2RGB))
+    ax1.set_title("Original:: " + filename , fontsize=18)
+    ax2.imshow(cv2.cvtColor(undist, cv2.COLOR_BGR2RGB))
+    ax2.set_title("Undistorted:: "+ filename, fontsize=18)
+    f.savefig(OUTDIR1 + "/op_" + str(time.time()) + ".png")
+ """
     ax1.imshow(cv2.cvtColor(cv2.imread(image), cv2.COLOR_BGR2RGB))
     ax1.set_title("Original:: " + image , fontsize=18)
     ax2.imshow(cv2.cvtColor(undist, cv2.COLOR_BGR2RGB))
@@ -154,7 +182,7 @@ for image in images:
 # We'll combine both these outputs to get final binary threshold image.<br/>
 
 def abs_thresh(img, sobel_kernel=3, mag_thresh=(0,255), return_grad= False, direction ='x'):
-    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) #RGB로 변환해놓고 표준화
     gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
     grad = None
     scaled_sobel = None
@@ -177,7 +205,7 @@ def abs_thresh(img, sobel_kernel=3, mag_thresh=(0,255), return_grad= False, dire
     
     return grad_binary
 
-img = undistort(images[0], objpoints, imgpoints)
+img = undistort(images[0], objpoints, imgpoints) #위 glob을 통해서 images를 받아왔다 리스트 형태로 이건 BGR
     
 combined_binary = abs_thresh(img, sobel_kernel=3, mag_thresh=(30, 100), direction='x')
 warped, warp_matrix, unwarp_matrix, out_img_orig, out_warped_img = transform_image(combined_binary, offset=300)
