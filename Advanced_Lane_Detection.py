@@ -132,9 +132,12 @@ print("]")
 def undistort(img_name, objpoints, imgpoints):
     img = cv2.imread(img_name)
     ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, img.shape[1:], None, None)
+    #카메라 켈리브레이션 수행, 실제 objpoints점(실제 세계의 점)과 imgpoints(이미지상에 매핑된점) 사용하여 내부매개변수 mtx, 왜곡계수 dist 계산
     undist= cv2.undistort(img, mtx, dist, None, mtx)
     return undist
 
+#ndistort 함수는 이미지 파일 이름을 입력으로 받아 파일을 먼저 읽은 다음 처리하는 반면, 
+#undistort_no_read 함수는 이미 불러온 이미지 데이터를 직접 입력으로 사용합니다.
 def undistort_no_read(img, objpoints, imgpoints):
     ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(objpoints, imgpoints, img.shape[1:], None, None)
     undist= cv2.undistort(img, mtx, dist, None, mtx)
@@ -142,7 +145,7 @@ def undistort_no_read(img, objpoints, imgpoints):
 
 
  #10번이미지 예시 출력, 오리지날 이미지와 왜곡수정한 이미지 나란히 두고 비교 하는 블록
-undist = undistort(CAL_IMGS+"/calibration10.jpg", objpoints, imgpoints)록
+undist = undistort(CAL_IMGS+"/calibration10.jpg", objpoints, imgpoints)
 f, (ax1, ax2) = plt.subplots(1, 2, figsize=(12,8))
 f.tight_layout()
 ax1.imshow(cv2.cvtColor(cv2.imread(CAL_IMGS+"/calibration10.jpg"), cv2.COLOR_BGR2RGB))
@@ -181,13 +184,15 @@ for image in images:
 # We'll also use color space HLS to get color transformed binary threshold image. <br/>
 # We'll combine both these outputs to get final binary threshold image.<br/>
 
+
+#sobel filter란 주파수의 방향성에 따라 필터링을 해주는 필터이다. 방향에 따라 얼마나 변하는지(x,y 방향 미분) 경계선 찾아준다
 def abs_thresh(img, sobel_kernel=3, mag_thresh=(0,255), return_grad= False, direction ='x'):
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) #RGB로 변환해놓고 표준화
     gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
     grad = None
     scaled_sobel = None
     
-    # Sobel x
+    # Sobel x, .lower()는 문자열내의 모든 대문자를 소문자로 변환하는 함수, 즉 대문자 소문자 아무거나 입력해도 소문자로 처리 하도록
     if direction.lower() == 'x':
         grad = cv2.Sobel(gray, cv2.CV_64F, 1, 0,ksize=sobel_kernel) # Take the derivative in x       
     # Sobel y
@@ -196,13 +201,12 @@ def abs_thresh(img, sobel_kernel=3, mag_thresh=(0,255), return_grad= False, dire
         
     if return_grad == True:
         return grad
-        
-    abs_sobel = np.absolute(grad) # Absolute x derivative to accentuate lines away from horizontal
-    scaled_sobel = np.uint8(255*abs_sobel/np.max(abs_sobel))
+    #미분결과가 양수(경계가 밝아지는 방향)인지 음수(어두워지는 방향)인지 보다 경계가 존재하는지 안하는지 미분강도만을 강조할 수 있으므로 절대값취한다.    
+    abs_sobel = np.absolute(grad) # Absolute x derivative to accentuate lines away from horizontal,
+    scaled_sobel = np.uint8(255*abs_sobel/np.max(abs_sobel)) # map함수처럼 0에서 255로 범위를 치환해주는 것
 
-    grad_binary = np.zeros_like(scaled_sobel)
-    grad_binary[(scaled_sobel >= mag_thresh[0]) & (scaled_sobel < mag_thresh[1])] = 1
-    
+    grad_binary = np.zeros_like(scaled_sobel) # scaled_sobel 이미지와 동일한 형태와 크기를 가지면서, 모든 값을 0으로 채운 새로운 배열을 생성, 검은판 그리고 
+    grad_binary[(scaled_sobel >= mag_thresh[0]) & (scaled_sobel < mag_thresh[1])] = 1 #설정한 임계값이상인 픽셀에만 표시하여 경계선 명확하게 추출, 함수 선언시  mag_thresh 튜플 불러오는것 0과 255
     return grad_binary
 
 img = undistort(images[0], objpoints, imgpoints) #위 glob을 통해서 images를 받아왔다 리스트 형태로 이건 BGR
@@ -381,7 +385,9 @@ ax1.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
 ax1.set_title("Original:: " + image , fontsize=18)
 ax2.imshow(warped, cmap='gray')
 ax2.set_title("Transformed:: "+ image, fontsize=18)
-
+ #hsv 색공간으로 변경
+ #소벨필터를 기반한 이진화 거친 레이어(sbinary)를 생성하고 
+#앞으로 여러 알고리즘을 통해 이진화의 통합본 레이어인 combined 레이어도 만들고 여기에 우선 소벨필터결과만 반영해둔다.
 def get_bin_img(img, kernel_size=3, sobel_dirn='X', sobel_thresh=(0,255), r_thresh=(0, 255), 
                 s_thresh=(0,255), b_thresh=(0, 255), g_thresh=(0, 255)):
     hls = cv2.cvtColor(img, cv2.COLOR_BGR2HLS).astype(np.float32)
@@ -401,23 +407,31 @@ def get_bin_img(img, kernel_size=3, sobel_dirn='X', sobel_thresh=(0,255), r_thre
     
     sbinary = np.zeros_like(scaled_sobel)
     sbinary[(scaled_sobel >= sobel_thresh[0]) & (scaled_sobel <= sobel_thresh[1])] = 1
-    
+    #sbiinary는 소벨필터 결과 하여 이진화여 나타낸 검은색 바탕에 가장자리 검출한 레이어
+    #combined에 복사하는 이유는 나중에 다른 과정(색상 기반 이진화)을 거친 이진화 처리 결과들도 combined에 합치고
+    #sbinary는 나중에 다시 소벨필터를 통한 이진화만 된결과로 사용할 수 있게 
     combined = np.zeros_like(sbinary)
     combined[(sbinary == 1)] = 1
 
     # Threshold R color channel
+    #함수는 원본 이미지와 R 채널에 적용할 임계값을 매개변수로 받아, 해당 조건을 만족하는 픽셀을 1로, 그렇지 않은 픽셀을 0으로 하는 이진화 이미지를 반환
     r_binary = get_rgb_thresh_img(img, thresh= r_thresh)
     
     # Threshhold G color channel
     g_binary = get_rgb_thresh_img(img, thresh= g_thresh, channel='G')
     
     # Threshhold B in LAB
+    #B 채널(파란색) 이진화는 LAB 색공간에서 수행됩니다. LAB 색공간은 다른 색공간과 달리 인간의 시각과 더 유사한 방식으로 색상을 구분합니다. 
+    #여기서 B 채널에 대한 임계값을 적용하여 이진화 이미지를 생성
     b_binary = get_lab_bthresh_img(img, thresh=b_thresh)
     
     # Threshold color channel
+    #S 채널(채도)에 임계값을 적용합니다. 채도는 색상의 강렬함을 나타내며, 
+    #이를 통해 색상이 뚜렷한 차선을 잘 감지할 수 있습니다.
     s_binary = get_hls_sthresh_img(img, thresh=s_thresh)
 
     # If two of the three are activated, activate in the binary image
+    #각 이진화를 거치고 나서 하나라도 1(즉, 조건을 만족하는 픽셀)인 경우, 최종 이진화 이미지(combined_binary)에서 해당 픽셀을 1로 설정합니다.
     combined_binary = np.zeros_like(combined)
     combined_binary[(r_binary == 1) | (combined == 1) | (s_binary == 1)| (b_binary == 1) | (g_binary == 1)] = 1
 
@@ -452,29 +466,33 @@ for image_name in images:
 # This will be helpful in finding lane curvature. <br/>
 # Note that after perspective transform the lanes should apear aproximately parallel <br/>
 
-def transform_image(img, offset=250, src=None, dst=None):    
-    img_size = (img.shape[1], img.shape[0])
+def transform_image(img, offset=250, src=None, dst=None):    # src: 변환을 정의하는데 필요한 소스, dst: 목적지
+    #.shape 속성: cv2.imread 해서 이미지를 읽어 오면 numpy 형태로 저장 되는데  이때 다양한 속성과 메서드가 생성되는데 이중 하나가 .shape 
+    #.shpae는 배열의 각 차원의 크기를 나타냅니다. 이미지 데이터에서는 (높이, 너비, 채널 수) 형태의 정보를 제공합니다.
+    #예를 들어, (640, 480, 3)은 높이가 640, 너비가 480, 색상 채널이 3(RGB)인 이미지를 의미
+    img_size = (img.shape[1], img.shape[0]) # 너비 높이 순으로 튜플 저장, 나중에 관전 변환 후 이미지 크기를 미리 지정
+
     
-    out_img_orig = np.copy(img)
-       
+    out_img_orig = np.copy(img) #원본 이미지의 복사본을 생성합니다. 이는 변환 전후 이미지를 비교하기 위해 사용
+    #원본 이미지에서 변환할 네 모서리 점
     leftupper  = (585, 460)
     rightupper = (705, 460)
     leftlower  = (210, img.shape[0])
     rightlower = (1080, img.shape[0])
     
-    
+    #변환 이미지에서의 위 4개의 점위치
     warped_leftupper = (offset,0)
-    warped_rightupper = (offset, img.shape[0])
-    warped_leftlower = (img.shape[1] - offset, 0)
+    warped_rightupper = (offset, img.shape[0]) 
+    warped_leftlower = (img.shape[1] - offset, 0) 
     warped_rightlower = (img.shape[1] - offset, img.shape[0])
     
-    color_r = [0, 0, 255]
+    color_r = [0, 0, 255] #컬러 코드 미리 리스트 형태로 만든 것
     color_g = [0, 255, 0]
     line_width = 5
     
-    if src is not None:
+    if src is not None: #src가 있다면 그걸 쓰고 
         src = src
-    else:
+    else: #없다면 아 4좌표를 src 로 쓴다
         src = np.float32([leftupper, leftlower, rightupper, rightlower])
         
     if dst is not None:
@@ -488,13 +506,16 @@ def transform_image(img, offset=250, src=None, dst=None):
     cv2.line(out_img_orig, rightupper, leftupper, color_g, line_width)
     
     # calculate the perspective transform matrix
-    M = cv2.getPerspectiveTransform(src, dst)
-    minv = cv2.getPerspectiveTransform(dst, src)
+    M = cv2.getPerspectiveTransform(src, dst)#원본 소스와 bird eye view로 변환한 좌표사이의 변환행렬
+    minv = cv2.getPerspectiveTransform(dst, src)# 변환한 좌표에서 다시 원본 소스의 좌표로 돌리는 변환행렬, 역행렬
     
     # Warp the image
-    warped = cv2.warpPerspective(img, M, img_size, flags=cv2.WARP_FILL_OUTLIERS+cv2.INTER_CUBIC)
+    #flags (선택적): 변환을 수행하는 방법을 지정하는 플래그
+    #cv2.WARP_FILL_OUTLIERS: 변환 과정에서 발생할 수 있는 외곽선 부분을 채우는 데 사용됩니다.
+    #cv2.INTER_CUBIC: 이미지를 확대하거나 축소할 때 사용하는 보간법 중 하나로, 픽셀 값들 사이를 부드럽게 만드는 데 유용합니다. 이는 확대 또는 회전된 이미지의 품질을 향상시키기 위해 사용됩니다.
+    warped = cv2.warpPerspective(img, M, img_size, flags=cv2.WARP_FILL_OUTLIERS+cv2.INTER_CUBIC) #변환한 이미지지
     out_warped_img = np.copy(warped)
-    
+    #변환한 이미지 위에 선그리기
     cv2.line(out_warped_img, warped_rightupper, warped_leftupper, color_r, line_width)
     cv2.line(out_warped_img, warped_rightupper, warped_rightlower, color_r , line_width * 2)
     cv2.line(out_warped_img, warped_leftlower, warped_rightlower, color_r, line_width)
@@ -912,4 +933,3 @@ HTML("""
 # I wonder what the tesla is using  that they displayed in recent autonomy day video.
 # <br/>
 
-'''
