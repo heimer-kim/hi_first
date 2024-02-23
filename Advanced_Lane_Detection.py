@@ -186,6 +186,8 @@ for image in images:
 
 
 #sobel filter란 주파수의 방향성에 따라 필터링을 해주는 필터이다. 방향에 따라 얼마나 변하는지(x,y 방향 미분) 경계선 찾아준다
+#x방향 조건을 넣을땐 x방향의 경계 변화량에 따른 검출 행렬 생성하고 y방향 조건을 넣을때도 같이 , 즉 하나에 한번씩 하고
+#  def mag_thresh에서 x y 성분 합쳐서 검출 행렬 생성
 def abs_thresh(img, sobel_kernel=3, mag_thresh=(0,255), return_grad= False, direction ='x'):
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB) #RGB로 변환해놓고 표준화
     gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
@@ -210,8 +212,9 @@ def abs_thresh(img, sobel_kernel=3, mag_thresh=(0,255), return_grad= False, dire
     return grad_binary
 
 img = undistort(images[0], objpoints, imgpoints) #위 glob을 통해서 images를 받아왔다 리스트 형태로 이건 BGR
-    
-combined_binary = abs_thresh(img, sobel_kernel=3, mag_thresh=(30, 100), direction='x')
+
+#X방향 변화량 검출
+combined_binary = abs_thresh(img, sobel_kernel=3, mag_thresh=(30, 100), direction='x') 
 warped, warp_matrix, unwarp_matrix, out_img_orig, out_warped_img = transform_image(combined_binary, offset=300)
 f, (ax1, ax2) = plt.subplots(1, 2, figsize=(12,8))
 f.tight_layout()
@@ -221,7 +224,8 @@ ax2.imshow(warped, cmap='gray')
 ax2.set_title("Transformed:: "+ image, fontsize=18)
 
 img = undistort(images[0], objpoints, imgpoints)
-    
+
+#Y방향 변화량 검출
 combined_binary = abs_thresh(img, sobel_kernel=3, mag_thresh=(30, 120), direction='y')
 warped, warp_matrix, unwarp_matrix, out_img_orig, out_warped_img = transform_image(combined_binary, offset=300)
 f, (ax1, ax2) = plt.subplots(1, 2, figsize=(12,8))
@@ -231,18 +235,19 @@ ax1.set_title("Original:: " + image , fontsize=18)
 ax2.imshow(warped, cmap='gray')
 ax2.set_title("Transformed:: "+ image, fontsize=18)
 
-def mag_threshold(img, sobel_kernel=3, mag_thresh=(0, 255)):    
+def mag_threshold(img, sobel_kernel=3, mag_thresh=(0, 255)): #x,y 방향 변화량 통합하여 mag_thresh 범위에 해당하는지에 따라 검출출   
     xgrad =  abs_thresh(img, sobel_kernel=sobel_kernel, mag_thresh=mag_thresh, return_grad=True)
     ygrad =  abs_thresh(img, sobel_kernel=sobel_kernel, mag_thresh=mag_thresh, return_grad=True, direction='y')
     
-    magnitude = np.sqrt(np.square(xgrad)+np.square(ygrad))
-    abs_magnitude = np.absolute(magnitude)
+    magnitude = np.sqrt(np.square(xgrad)+np.square(ygrad)) #제곱합에 제곱근하여 x y 방향 경사값  합의 크기 계산
+    abs_magnitude = np.absolute(magnitude)#불필요하다고 생각 위에서 이미 크기만을 나타내고 있기에
     scaled_magnitude = np.uint8(255*abs_magnitude/np.max(abs_magnitude))
     mag_binary = np.zeros_like(scaled_magnitude)
     mag_binary[(scaled_magnitude >= mag_thresh[0]) & (scaled_magnitude < mag_thresh[1])] = 1
     
     return mag_binary
 
+# X ,Y 두 방향 mag_threshold로 검출
 img = undistort(images[0], objpoints, imgpoints)
     
 combined_binary = mag_threshold(img, mag_thresh=(30, 100))
@@ -254,7 +259,7 @@ ax1.set_title("Original:: " + image , fontsize=18)
 ax2.imshow(warped, cmap='gray')
 ax2.set_title("Transformed:: "+ image, fontsize=18)
 
-def dir_threshold(img, sobel_kernel=3, thresh=(0, np.pi/2)):
+def dir_threshold(img, sobel_kernel=3, thresh=(0, np.pi/2)): #차선기울기 , 방향성, 아크탄젠트로 게산
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
     
@@ -269,12 +274,13 @@ def dir_threshold(img, sobel_kernel=3, thresh=(0, np.pi/2)):
     binary_output = np.zeros_like(grad_dir).astype(np.uint8)
     binary_output[(grad_dir >= thresh[0]) & (grad_dir < thresh[1])] = 1
     return binary_output
-
+#매개변수로 정한 채널 한개에 대해서만 범위에 따른 검출
 def get_rgb_thresh_img(img, channel='R', thresh=(0, 255)):
     img1 = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    
     if channel == 'R':
         bin_img = img1[:, :, 0]
-    if channel == 'G' :
+    if channel == 'G' :른
         bin_img = img1[:, :, 1]
     if channel == 'B' :
         bin_img = img1[:, :, 2]
@@ -285,7 +291,7 @@ def get_rgb_thresh_img(img, channel='R', thresh=(0, 255)):
     return binary_img
 
 img = undistort(images[0], objpoints, imgpoints)
-    
+#R채널 검출 테스트
 combined_binary = get_rgb_thresh_img(img, thresh=(230, 255))
 warped, warp_matrix, unwarp_matrix, out_img_orig, out_warped_img = transform_image(combined_binary, offset=300)
 f, (ax1, ax2) = plt.subplots(1, 2, figsize=(12,8))
@@ -296,7 +302,7 @@ ax2.imshow(warped, cmap='gray')
 ax2.set_title("Transformed:: "+ image, fontsize=18)
 
 img = undistort(images[0], objpoints, imgpoints)
-    
+#G채널 검출 테스트
 combined_binary = get_rgb_thresh_img(img, thresh=(200, 255), channel='G')
 warped, warp_matrix, unwarp_matrix, out_img_orig, out_warped_img = transform_image(combined_binary, offset=300)
 f, (ax1, ax2) = plt.subplots(1, 2, figsize=(12,8))
@@ -307,7 +313,7 @@ ax2.imshow(warped, cmap='gray')
 ax2.set_title("Transformed:: "+ image, fontsize=18)
 
 img = undistort(images[0], objpoints, imgpoints)
-    
+#B채널 검출 테스트
 combined_binary = get_rgb_thresh_img(img, thresh=(185, 255), channel='B')
 warped, warp_matrix, unwarp_matrix, out_img_orig, out_warped_img = transform_image(combined_binary, offset=300)
 f, (ax1, ax2) = plt.subplots(1, 2, figsize=(12,8))
@@ -316,7 +322,8 @@ ax1.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
 ax1.set_title("Original:: " + image , fontsize=18)
 ax2.imshow(warped, cmap='gray')
 ax2.set_title("Transformed:: "+ image, fontsize=18)
-
+#HLS 이미지에서 Lightness 채널을 선택합니다. Lightness 채널은 이미지의 밝기 정보를 담고 있으며, 
+#1은 HLS 색상 공간에서 두 번째 채널을 의미합니다
 def get_hls_lthresh_img(img, thresh=(0, 255)):
     hls_img= cv2.cvtColor(img, cv2.COLOR_BGR2HLS)
     L = hls_img[:, :, 1]
@@ -336,7 +343,8 @@ ax1.imshow(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
 ax1.set_title("Original:: " + image , fontsize=18)
 ax2.imshow(warped, cmap='gray')
 ax2.set_title("Transformed:: "+ image, fontsize=18)
-
+#환된 HLS 이미지에서 Saturation 채널을 선택합니다. Saturation 채널은 이미지의 채도 정보를 담고 있으며,
+# 여기서 2는 HLS 색상 공간에서 세 번째 채널을 의미합니다.
 def get_hls_sthresh_img(img, thresh=(0, 255)):
     hls_img= cv2.cvtColor(img, cv2.COLOR_BGR2HLS)
     S = hls_img[:, :, 2]
@@ -357,10 +365,16 @@ ax1.set_title("Original:: " + image , fontsize=18)
 ax2.imshow(warped, cmap='gray')
 ax2.set_title("Transformed:: "+ image, fontsize=18)
 
+
+
+
+#LAB 색상 공간은 L 채널(Lightness, 밝기), 
+#A 채널(녹색에서 마젠타 사이 색상), 
+#B 채널(파란색에서 노란색 사이 색상)로 구성됩니다
 def get_lab_athresh_img(img, thresh=(0,255)):
     lab_img = cv2.cvtColor(img, cv2.COLOR_BGR2LAB)
     A = lab_img[:, :, 1]
-    
+    #A 채널을 선택합니다. A 채널은 이미지의 색상 정보 중 녹색에서 마젠타 색상 범위를 나타내며, 색상의 차이를 감지하는 데 유용합니다.
     bin_op = np.zeros_like(A).astype(np.uint8)
     bin_op[(A >= thresh[0]) & (A < thresh[1])] = 1
     
@@ -562,6 +576,9 @@ def find_lines(warped_img, nwindows=9, margin=80, minpix=40):
     histogram = np.sum(warped_img[warped_img.shape[0]//2:,:], axis=0)
         
     # Create an output image to draw on and visualize the result
+    #dstack은 마지막 차원(여기서는 깊이 차원)방향으로 배열을 쌓아서 하비는 기능 수행,
+    #여기서는 gray 인 warped_img 2차원 배열 즉 을 3채널로 배값치하여 r, g, b처럼 3채널에 배치 한다.
+    #이 때 gray는 0과 1 사이 값이므로 255 를 곱해줘서 범위를 0~255범위로 바꿔서 컬러로 바꿀준비
     out_img = np.dstack((warped_img, warped_img, warped_img)) * 255
     
     # Find the peak of the left and right halves of the histogram
